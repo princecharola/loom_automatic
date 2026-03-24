@@ -1,8 +1,13 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 
 export function AlertList({ alerts }) {
   return (
-    <div className="card alert-card">
+    <motion.div
+      className="card alert-card"
+      whileHover={{ y: -4, boxShadow: '0 16px 36px rgba(15, 23, 42, 0.12)' }}
+      transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+    >
       <h3>Active & Recent Alerts</h3>
       <ul>
         {alerts.map((alert) => (
@@ -11,10 +16,13 @@ export function AlertList({ alerts }) {
               <strong>{alert.machineId}</strong>
               <p>{alert.message}</p>
             </div>
-            <span>{new Date(alert.createdAt).toLocaleTimeString()}</span>
+            <div className="alert-meta">
+              <span className={`status-pill ${alert.type}`}>{alert.type}</span>
+              <span>{new Date(alert.createdAt).toLocaleTimeString()}</span>
+            </div>
           </li>
         ))}
       </ul>
-    </div>
+    </motion.div>
   );
 }

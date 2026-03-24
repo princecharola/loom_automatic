@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import {
   CartesianGrid,
   Line,
@@ -17,7 +18,11 @@ export function SpeedChart({ readings }) {
   }));
 
   return (
-    <div className="card chart-card">
+    <motion.div
+      className="card chart-card"
+      whileHover={{ y: -4, boxShadow: '0 16px 36px rgba(15, 23, 42, 0.12)' }}
+      transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+    >
       <h3>Speed Trend</h3>
       <ResponsiveContainer width="100%" height={320}>
         <LineChart data={chartData.slice(-20)}>
@@ -28,6 +33,6 @@ export function SpeedChart({ readings }) {
           <Line type="monotone" dataKey="speed" stroke="#4f46e5" strokeWidth={2} />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </motion.div>
   );
 }
