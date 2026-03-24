@@ -1,7 +1,71 @@
 import { MachineReading } from '../models/MachineReading.js';
 import { Alert } from '../models/Alert.js';
+import { Machine } from '../models/Machine.js';
 import { evaluateAlerts } from '../services/alertService.js';
 import { getSocket } from '../config/socket.js';
+
+
+
+export async function getMachines(req, res, next) {
+  try {
+    const machines = await Machine.find().sort({ machineId: 1 });
+    return res.json(machines);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function createMachine(req, res, next) {
+  try {
+    const { machineId, name, location, status, speed = 0 } = req.body;
+
+    const machine = await Machine.create({
+      machineId,
+      name,
+      location,
+      status,
+      speed,
+      timestamp: new Date()
+    });
+
+    return res.status(201).json(machine);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function updateMachine(req, res, next) {
+  try {
+    const { machineId } = req.params;
+    const machine = await Machine.findOneAndUpdate({ machineId }, req.body, {
+      new: true,
+      runValidators: true
+    });
+
+    if (!machine) {
+      return res.status(404).json({ message: 'Machine not found.' });
+    }
+
+    return res.json(machine);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function deleteMachine(req, res, next) {
+  try {
+    const { machineId } = req.params;
+    const machine = await Machine.findOneAndDelete({ machineId });
+
+    if (!machine) {
+      return res.status(404).json({ message: 'Machine not found.' });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+}
 
 export async function ingestMachineData(req, res, next) {
   try {
@@ -19,6 +83,18 @@ export async function ingestMachineData(req, res, next) {
     const io = getSocket();
     io.emit('machine:reading', reading);
     io.to(`machine:${reading.machineId}`).emit('machine:reading', reading);
+
+    await Machine.findOneAndUpdate(
+      { machineId: reading.machineId },
+      {
+        machineId: reading.machineId,
+        name: reading.machineId,
+        status: reading.status,
+        speed: reading.speed,
+        timestamp: reading.timestamp
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
     const alerts = await evaluateAlerts(reading, io);
 
