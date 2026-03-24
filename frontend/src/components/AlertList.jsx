@@ -1,3 +1,5 @@
+import React from 'react';
+
 export function AlertList({ alerts }) {
   return (
     <div className="card alert-card">
