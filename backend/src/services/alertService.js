@@ -1,31 +1,30 @@
 import { Alert } from '../models/Alert.js';
 
-export async function evaluateAlerts(reading, io) {
-  const threshold = Number(process.env.SPEED_WARNING_THRESHOLD || 80);
+export async function maybeCreateAlerts(machine, io) {
   const alerts = [];
+  const tempThreshold = Number(process.env.TEMPERATURE_THRESHOLD || 90);
 
-  if (reading.speed === 0) {
+  if (machine.temperature > tempThreshold) {
     alerts.push(
       await createAlert(
         {
-          machineId: reading.machineId,
-          type: 'critical',
-          message: `Machine ${reading.machineId} has stopped.`,
-          speed: reading.speed,
-          threshold
+          machineId: machine._id.toString(),
+          type: 'warning',
+          message: `${machine.name} temperature exceeded threshold (${machine.temperature}°C).`,
+          threshold: tempThreshold
         },
         io
       )
     );
-  } else if (reading.speed < threshold) {
+  }
+
+  if (machine.status === 'off') {
     alerts.push(
       await createAlert(
         {
-          machineId: reading.machineId,
-          type: 'warning',
-          message: `Machine ${reading.machineId} speed dropped below threshold.`,
-          speed: reading.speed,
-          threshold
+          machineId: machine._id.toString(),
+          type: 'critical',
+          message: `${machine.name} has stopped.`
         },
         io
       )
@@ -37,15 +36,8 @@ export async function evaluateAlerts(reading, io) {
 
 async function createAlert(payload, io) {
   const alert = await Alert.create(payload);
-
   if (io) {
-    io.emit('machine:alert', alert);
-    io.to(`machine:${alert.machineId}`).emit('machine:alert', alert);
+    io.emit('alert:new', alert);
   }
-
-  if (process.env.EMAIL_NOTIFICATIONS === 'true') {
-    console.log(`Notification placeholder: ${alert.message}`);
-  }
-
   return alert;
 }

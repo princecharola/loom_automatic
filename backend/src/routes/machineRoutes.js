@@ -1,18 +1,20 @@
 import { Router } from 'express';
 import {
-  getAlerts,
-  getMachineReadings,
-  getMachineReadingsById,
-  getSummary,
-  ingestMachineData
+  createMachine,
+  deleteMachine,
+  listAlerts,
+  listMachines,
+  summary,
+  updateMachine
 } from '../controllers/machineController.js';
 
 const router = Router();
 
-router.post('/data', ingestMachineData);
-router.get('/readings', getMachineReadings);
-router.get('/summary', getSummary);
-router.get('/alerts', getAlerts);
-router.get('/:machineId/readings', getMachineReadingsById);
+router.get('/', listMachines);
+router.post('/', createMachine);
+router.put('/:id', updateMachine);
+router.delete('/:id', deleteMachine);
+router.get('/alerts/list', listAlerts);
+router.get('/summary', summary);
 
 export default router;
