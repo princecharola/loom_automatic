@@ -1,3 +1,5 @@
+import React from 'react';
+
 export function StatCard({ title, value, accent }) {
   return (
     <div className="card stat-card">
