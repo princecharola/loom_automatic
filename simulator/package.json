@@ -1,0 +1,11 @@
+{
+  "name": "loom-automation-simulator",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.8.4"
+  }
+}
