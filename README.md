@@ -242,3 +242,4 @@ This script will:
 - `TEMP_ALERT_THRESHOLD` controls high-temperature alerts.
 - For production, set a strong `JWT_SECRET` and secure CORS.
 - Add pagination for machines/alerts if data grows.
+- The backend now uses a single machine model (`Machine`) to avoid duplicate/overlapping machine schema files.
