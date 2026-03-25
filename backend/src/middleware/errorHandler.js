@@ -1,9 +1,18 @@
-export function errorHandler(error, req, res, next) {
-  console.error(error);
+import { logger } from '../utils/logger.js';
 
-  if (error.name === 'ValidationError') {
-    return res.status(400).json({ message: error.message });
+export function errorHandler(error, req, res, next) {
+  logger.error('Unhandled error', {
+    path: req.originalUrl,
+    method: req.method,
+    message: error.message
+  });
+
+  if (res.headersSent) {
+    return next(error);
   }
 
-  return res.status(500).json({ message: 'Internal server error.' });
+  const status = error.statusCode || 500;
+  return res.status(status).json({
+    message: error.message || 'Internal server error.'
+  });
 }

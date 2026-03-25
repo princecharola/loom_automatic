@@ -1,36 +1,56 @@
 import axios from 'axios';
 
-const apiUrl = process.env.API_URL || 'http://localhost:4000/api/machines/data';
-const machineId = process.env.MACHINE_ID || 'loom-01';
+const apiUrl = process.env.API_URL || 'http://localhost:5000/api/machines/data';
+const machineCount = Number(process.env.MACHINE_COUNT || 6);
+const intervalMs = Number(process.env.SEND_INTERVAL_MS || 4000);
 
-function randomSpeed() {
-  const shouldStop = Math.random() < 0.15;
-  if (shouldStop) {
+const machineState = Array.from({ length: machineCount }).map((_, index) => ({
+  machineId: `loom-${String(index + 1).padStart(2, '0')}`,
+  baseline: 90 + Math.floor(Math.random() * 40),
+  phase: 'running'
+}));
+
+function generateSpeed(state) {
+  const failureChance = Math.random();
+  if (failureChance < 0.06) {
+    state.phase = 'error';
     return 0;
   }
 
-  return Math.floor(Math.random() * 100) + 60;
+  if (failureChance < 0.15) {
+    state.phase = 'recovery';
+    return Math.floor(Math.random() * 40) + 20;
+  }
+
+  state.phase = 'running';
+  const jitter = Math.floor(Math.random() * 30) - 10;
+  return Math.max(0, state.baseline + jitter);
 }
 
-async function sendReading() {
-  const speed = randomSpeed();
-  const status = speed === 0 ? 'error' : 'running';
+async function sendReading(state) {
+  const speed = generateSpeed(state);
+  const status = speed === 0 ? 'error' : speed < 60 ? 'stopped' : 'running';
 
   const payload = {
-    machineId,
+    machineId: state.machineId,
     speed,
     status,
     timestamp: new Date().toISOString()
   };
 
   try {
-    const response = await axios.post(apiUrl, payload);
-    console.log(`[SIMULATOR] Sent reading`, response.data.reading);
+    await axios.post(apiUrl, payload);
+    console.log(`[SIMULATOR] ${state.machineId} | status=${status} speed=${speed}`);
   } catch (error) {
-    console.error('[SIMULATOR] Failed to send reading', error.message);
+    console.error(`[SIMULATOR] Failed ${state.machineId}`, error.message);
   }
 }
 
-console.log(`Starting simulator for ${machineId}. Sending data to ${apiUrl}`);
-sendReading();
-setInterval(sendReading, 5000);
+console.log(`Starting simulator for ${machineCount} machines. Sending data to ${apiUrl}`);
+
+async function tick() {
+  await Promise.all(machineState.map((state) => sendReading(state)));
+}
+
+tick();
+setInterval(tick, intervalMs);

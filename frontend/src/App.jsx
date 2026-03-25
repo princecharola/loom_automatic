@@ -2,23 +2,32 @@ import React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  acknowledgeAlert,
   addMachine,
   editMachine,
   fetchAlerts,
   fetchMachines,
-  removeMachine
+  login,
+  removeMachine,
+  resolveAlert
 } from './services/api';
 import { socket } from './services/socket';
-import { StatCard } from './components/StatCard';
-import { SpeedChart } from './components/SpeedChart';
-import { AlertList } from './components/AlertList';
+import { DashboardPage } from './pages/DashboardPage';
+import { MachinesPage } from './pages/MachinesPage';
 
 const emptyForm = {
   machineId: '',
   name: '',
   location: '',
+  type: 'loom',
+  assignedOperators: '',
   status: 'stopped',
-  speed: 0
+  speed: 0,
+  thresholds: {
+    warningSpeed: 80,
+    criticalSpeed: 10,
+    maxIdleMinutes: 10
+  }
 };
 
 export default function App() {
@@ -27,19 +36,42 @@ export default function App() {
   const [readings, setReadings] = useState([]);
   const [formState, setFormState] = useState(emptyForm);
   const [editingId, setEditingId] = useState('');
+  const [activeView, setActiveView] = useState('dashboard');
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [authForm, setAuthForm] = useState({ email: '', password: '' });
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [session, setSession] = useState(() => {
+    const token = localStorage.getItem('loom_token') || '';
+    const user = localStorage.getItem('loom_user');
+    return { token, user: user ? JSON.parse(user) : null };
+  });
 
   useEffect(() => {
-    async function bootstrap() {
-      const [machineData, alertData] = await Promise.all([fetchMachines(), fetchAlerts()]);
+    document.body.classList.toggle('dark-mode', isDarkMode);
+  }, [isDarkMode]);
+
+  async function bootstrapDashboard() {
+    setIsLoading(true);
+    setErrorMessage('');
+
+    try {
+      const [machineData, alertData] = await Promise.all([fetchMachines('?limit=50'), fetchAlerts('?limit=20')]);
       setMachines(machineData);
       setReadings(machineData);
       setAlerts(alertData);
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to load dashboard data.');
+    } finally {
+      setIsLoading(false);
     }
+  }
 
-    bootstrap();
+  useEffect(() => {
+    bootstrapDashboard();
 
     socket.on('machine:reading', (reading) => {
-      setReadings((current) => [...current.slice(-49), reading]);
+      setReadings((current) => [...current.slice(-99), reading]);
       setMachines((current) => {
         const existing = current.find((item) => item.machineId === reading.machineId);
         if (!existing) {
@@ -71,26 +103,41 @@ export default function App() {
     const avgSpeed = totalMachines
       ? Math.round(machines.reduce((sum, item) => sum + (Number(item.speed) || 0), 0) / totalMachines)
       : 0;
+    const criticalAlerts = alerts.filter((item) => item.type === 'critical' || item.type === 'error').length;
+    const productionCount = readings.length;
 
-    return { totalMachines, running, stopped, avgSpeed };
-  }, [machines]);
+    return { totalMachines, running, stopped, avgSpeed, criticalAlerts, productionCount };
+  }, [machines, alerts, readings]);
 
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (editingId) {
-      const updated = await editMachine(editingId, formState);
-      setMachines((current) =>
-        current.map((machine) => (machine.machineId === editingId ? updated : machine))
-      );
-      setEditingId('');
-      setFormState(emptyForm);
-      return;
-    }
+    try {
+      setErrorMessage('');
+      const payload = {
+        ...formState,
+        assignedOperators: formState.assignedOperators
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      };
 
-    const created = await addMachine(formState);
-    setMachines((current) => [...current, created].sort((a, b) => a.machineId.localeCompare(b.machineId)));
-    setFormState(emptyForm);
+      if (editingId) {
+        const updated = await editMachine(editingId, payload);
+        setMachines((current) =>
+          current.map((machine) => (machine.machineId === editingId ? updated : machine))
+        );
+        setEditingId('');
+        setFormState(emptyForm);
+        return;
+      }
+
+      const created = await addMachine(payload);
+      setMachines((current) => [...current, created].sort((a, b) => a.machineId.localeCompare(b.machineId)));
+      setFormState(emptyForm);
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to save machine details.');
+    }
   }
 
   function handleEdit(machine) {
@@ -99,134 +146,164 @@ export default function App() {
       machineId: machine.machineId,
       name: machine.name,
       location: machine.location,
+      type: machine.type || 'loom',
+      assignedOperators: (machine.assignedOperators || []).join(', '),
       status: machine.status,
-      speed: machine.speed
+      speed: machine.speed,
+      thresholds: machine.thresholds || emptyForm.thresholds
     });
+    setActiveView('machines');
+  }
+
+  function cancelEdit() {
+    setEditingId('');
+    setFormState(emptyForm);
   }
 
   async function handleDelete(machineId) {
-    await removeMachine(machineId);
-    setMachines((current) => current.filter((machine) => machine.machineId !== machineId));
-    if (editingId === machineId) {
-      setEditingId('');
-      setFormState(emptyForm);
+    try {
+      setErrorMessage('');
+      await removeMachine(machineId);
+      setMachines((current) => current.filter((machine) => machine.machineId !== machineId));
+      if (editingId === machineId) {
+        cancelEdit();
+      }
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to remove machine.');
+    }
+  }
+
+  async function handleAuthSubmit(event) {
+    event.preventDefault();
+    try {
+      const data = await login(authForm);
+      localStorage.setItem('loom_token', data.token);
+      localStorage.setItem('loom_user', JSON.stringify(data.user));
+      setSession({ token: data.token, user: data.user });
+      setErrorMessage('');
+      bootstrapDashboard();
+    } catch (error) {
+      setErrorMessage(error.message || 'Login failed.');
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('loom_token');
+    localStorage.removeItem('loom_user');
+    setSession({ token: '', user: null });
+  }
+
+  async function handleAcknowledgeAlert(alertId) {
+    try {
+      const updated = await acknowledgeAlert(alertId);
+      setAlerts((current) => current.map((item) => (item._id === alertId ? updated : item)));
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to acknowledge alert.');
+    }
+  }
+
+  async function handleResolveAlert(alertId) {
+    try {
+      const updated = await resolveAlert(alertId);
+      setAlerts((current) => current.map((item) => (item._id === alertId ? updated : item)));
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to resolve alert.');
     }
   }
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        className="dashboard"
-        key="dashboard"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.3 }}
-      >
-        <header>
-          <h1>Loom Machine Monitoring Dashboard</h1>
-          <p>Real-time view of machine speed, status, and alerts.</p>
-        </header>
+    <div className="app-shell">
+      <aside className="sidebar card">
+        <h2>LoomOps</h2>
+        <p className="sidebar-copy">Automation monitoring</p>
 
-        <section className="stats-grid">
-          <StatCard title="Machines" value={stats.totalMachines} accent="#0f172a" />
-          <StatCard title="Running" value={stats.running} accent="#16a34a" />
-          <StatCard title="Stopped" value={stats.stopped} accent="#dc2626" />
-          <StatCard title="Avg Speed" value={`${stats.avgSpeed} RPM`} accent="#4f46e5" />
-        </section>
-
-        <section className="content-grid">
-          <SpeedChart readings={readings} />
-          <AlertList alerts={alerts} />
-        </section>
-
-        <section className="card table-card">
-          <h3>Latest Machine Status</h3>
-          <form className="machine-form" onSubmit={handleSubmit}>
+        {session.user ? (
+          <div className="auth-panel">
+            <strong>{session.user.fullName}</strong>
+            <small>{session.user.role}</small>
+            <button type="button" className="secondary" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        ) : (
+          <form className="auth-form" onSubmit={handleAuthSubmit}>
             <input
-              required
-              value={formState.machineId}
-              onChange={(event) => setFormState((current) => ({ ...current, machineId: event.target.value }))}
-              placeholder="Machine ID"
-              disabled={Boolean(editingId)}
+              type="email"
+              placeholder="Email"
+              value={authForm.email}
+              onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))}
             />
             <input
-              required
-              value={formState.name}
-              onChange={(event) => setFormState((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Name"
+              type="password"
+              placeholder="Password"
+              value={authForm.password}
+              onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))}
             />
-            <input
-              value={formState.location}
-              onChange={(event) => setFormState((current) => ({ ...current, location: event.target.value }))}
-              placeholder="Location"
-            />
-            <select
-              value={formState.status}
-              onChange={(event) => setFormState((current) => ({ ...current, status: event.target.value }))}
-            >
-              <option value="running">running</option>
-              <option value="stopped">stopped</option>
-              <option value="error">error</option>
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={formState.speed}
-              onChange={(event) =>
-                setFormState((current) => ({ ...current, speed: Number(event.target.value) || 0 }))
-              }
-              placeholder="Speed"
-            />
-            <button type="submit">{editingId ? 'Update Machine' : 'Add Machine'}</button>
-            {editingId ? (
-              <button type="button" className="secondary" onClick={() => {
-                setEditingId('');
-                setFormState(emptyForm);
-              }}>
-                Cancel
-              </button>
-            ) : null}
+            <button type="submit">Login</button>
           </form>
-          <table>
-            <thead>
-              <tr>
-                <th>Machine</th>
-                <th>Name</th>
-                <th>Location</th>
-                <th>Speed</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {machines.map((item) => (
-                <tr key={item.machineId}>
-                  <td>{item.machineId}</td>
-                  <td>{item.name}</td>
-                  <td>{item.location}</td>
-                  <td>{item.speed}</td>
-                  <td>
-                    <span className={`badge ${item.status}`}>{item.status}</span>
-                  </td>
-                  <td>{new Date(item.timestamp).toLocaleString()}</td>
-                  <td>
-                    <div className="table-actions">
-                      <button type="button" className="secondary" onClick={() => handleEdit(item)}>
-                        Edit
-                      </button>
-                      <button type="button" className="danger" onClick={() => handleDelete(item.machineId)}>
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </motion.div>
-    </AnimatePresence>
+        )}
+
+        <button type="button" className="secondary" onClick={() => setIsDarkMode((current) => !current)}>
+          {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+        </button>
+
+        <nav>
+          <button
+            type="button"
+            className={`nav-link ${activeView === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveView('dashboard')}
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${activeView === 'machines' ? 'active' : ''}`}
+            onClick={() => setActiveView('machines')}
+          >
+            Machines
+          </button>
+        </nav>
+      </aside>
+
+      <main className="main-content">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeView}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+          >
+            {activeView === 'dashboard' ? (
+              <DashboardPage
+                machines={machines}
+                alerts={alerts}
+                readings={readings}
+                stats={stats}
+                isLoading={isLoading}
+                errorMessage={errorMessage}
+                currentUser={session.user}
+                onAcknowledgeAlert={handleAcknowledgeAlert}
+                onResolveAlert={handleResolveAlert}
+              />
+            ) : (
+              <MachinesPage
+                machines={machines}
+                formState={formState}
+                editingId={editingId}
+                isLoading={isLoading}
+                errorMessage={errorMessage}
+                onChangeForm={setFormState}
+                onSubmit={handleSubmit}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onCancel={cancelEdit}
+                canManage={session.user?.role === 'ADMIN'}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </div>
   );
 }

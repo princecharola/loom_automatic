@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppCard } from '../components/AppCard';
 import { Container } from '../components/Container';
 import { colors } from '../theme/colors';
@@ -9,10 +9,10 @@ function alertTypeColor(type) {
   return colors.warning;
 }
 
-export function AlertsScreen({ alerts }) {
+export function AlertsScreen({ alerts, onRefresh }) {
   return (
     <Container title="Alerts" subtitle="Warning and critical updates">
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}>
         {alerts.map((alert) => (
           <AppCard key={alert._id || `${alert.machineId}-${alert.createdAt}`}>
             <View style={styles.row}>

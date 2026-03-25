@@ -1,0 +1,38 @@
+version: '3.9'
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      - PORT=4000
+      - MONGO_URI=mongodb://mongo:27017/loom
+      - CLIENT_ORIGIN=http://localhost:5173
+      - JWT_SECRET=change_this_secret
+      - BOOTSTRAP_ADMIN=true
+      - ADMIN_EMAIL=admin@loomops.local
+      - ADMIN_PASSWORD=ChangeThisAdminPass123!
+    ports:
+      - '5000:4000'
+    depends_on:
+      - mongo
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+      - VITE_SOCKET_URL=http://localhost:5000
+    ports:
+      - '5173:5173'
+    depends_on:
+      - backend
+
+  mongo:
+    image: mongo:7
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

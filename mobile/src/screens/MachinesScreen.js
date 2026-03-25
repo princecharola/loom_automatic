@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppCard } from '../components/AppCard';
 import { Container } from '../components/Container';
 import { PressableScaleButton } from '../components/PressableScaleButton';
@@ -11,10 +11,10 @@ function statusColor(status) {
   return colors.warning;
 }
 
-export function MachinesScreen({ machines }) {
+export function MachinesScreen({ machines, onRefresh }) {
   return (
     <Container title="Machines" subtitle="Live machine status and speed">
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}>
         {machines.map((machine) => (
           <AppCard key={machine.machineId}>
             <View style={styles.row}>

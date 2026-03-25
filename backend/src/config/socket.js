@@ -1,31 +1,31 @@
 import { Server } from 'socket.io';
 
-let ioInstance;
+let io;
 
-export function initializeSocket(server, options = {}) {
-  ioInstance = new Server(server, {
+export async function initializeSocket(server, options = {}) {
+  io = new Server(server, {
     cors: {
-      origin: options.clientOrigin || '*',
-      methods: ['GET', 'POST']
+      origin: options.clientOrigin || '*'
     }
   });
 
-  ioInstance.on('connection', (socket) => {
+  io.on('connection', (socket) => {
     socket.on('machine:subscribe', (machineId) => {
-      if (machineId) {
-        socket.join(`machine:${machineId}`);
-        socket.emit('machine:subscribed', { machineId });
-      }
+      socket.join(`machine:${machineId}`);
+    });
+
+    socket.on('machine:unsubscribe', (machineId) => {
+      socket.leave(`machine:${machineId}`);
     });
   });
 
-  return ioInstance;
+  return io;
 }
 
 export function getSocket() {
-  if (!ioInstance) {
-    throw new Error('Socket.io is not initialized.');
+  if (!io) {
+    throw new Error('Socket.io has not been initialized.');
   }
 
-  return ioInstance;
+  return io;
 }

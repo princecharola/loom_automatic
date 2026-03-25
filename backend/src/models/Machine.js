@@ -6,11 +6,17 @@ const machineSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      unique: true
+      unique: true,
+      index: true
     },
     name: {
       type: String,
       required: true,
+      trim: true
+    },
+    type: {
+      type: String,
+      default: 'loom',
       trim: true
     },
     location: {
@@ -18,10 +24,32 @@ const machineSchema = new mongoose.Schema(
       default: 'Floor 1',
       trim: true
     },
+    assignedOperators: {
+      type: [String],
+      default: []
+    },
+    thresholds: {
+      warningSpeed: {
+        type: Number,
+        min: 0,
+        default: 80
+      },
+      criticalSpeed: {
+        type: Number,
+        min: 0,
+        default: 10
+      },
+      maxIdleMinutes: {
+        type: Number,
+        min: 1,
+        default: 10
+      }
+    },
     status: {
       type: String,
       enum: ['running', 'stopped', 'error'],
-      default: 'stopped'
+      default: 'stopped',
+      index: true
     },
     speed: {
       type: Number,
@@ -30,7 +58,8 @@ const machineSchema = new mongoose.Schema(
     },
     timestamp: {
       type: Date,
-      default: Date.now
+      default: Date.now,
+      index: true
     }
   },
   {
@@ -39,5 +68,6 @@ const machineSchema = new mongoose.Schema(
   }
 );
 
+machineSchema.index({ status: 1, timestamp: -1 });
 
 export const Machine = mongoose.model('Machine', machineSchema);

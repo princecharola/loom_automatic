@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Container } from '../components/Container';
 import { AppCard } from '../components/AppCard';
 import { colors } from '../theme/colors';
@@ -14,7 +14,7 @@ function MetricCard({ icon, label, value, accent }) {
   );
 }
 
-export function DashboardScreen({ machines, alerts }) {
+export function DashboardScreen({ machines, alerts, onRefresh }) {
   const metrics = useMemo(() => {
     const totalMachines = machines.length;
     const activeMachines = machines.filter((machine) => machine.status === 'running').length;
@@ -25,11 +25,13 @@ export function DashboardScreen({ machines, alerts }) {
 
   return (
     <Container title="Dashboard" subtitle="Operational overview of your loom floor">
+      <ScrollView refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}>
       <View style={styles.grid}>
         <MetricCard icon="🧵" label="Total Machines" value={metrics.totalMachines} accent={colors.primary} />
         <MetricCard icon="✅" label="Active Machines" value={metrics.activeMachines} accent={colors.success} />
         <MetricCard icon="⚠️" label="Alerts" value={metrics.alertCount} accent={colors.warning} />
       </View>
+      </ScrollView>
     </Container>
   );
 }

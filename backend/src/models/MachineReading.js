@@ -16,16 +16,15 @@ const machineReadingSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ['running', 'stopped', 'error'],
-      required: true
+      required: true,
+      default: 'running',
+      index: true
     },
     timestamp: {
       type: Date,
       required: true,
+      default: Date.now,
       index: true
-    },
-    receivedAt: {
-      type: Date,
-      default: Date.now
     }
   },
   {
@@ -35,6 +34,5 @@ const machineReadingSchema = new mongoose.Schema(
 
 machineReadingSchema.index({ machineId: 1, timestamp: -1 });
 machineReadingSchema.index({ status: 1, timestamp: -1 });
-machineReadingSchema.index({ timestamp: -1 });
 
 export const MachineReading = mongoose.model('MachineReading', machineReadingSchema);

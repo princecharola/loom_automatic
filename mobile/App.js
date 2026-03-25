@@ -1,14 +1,15 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
-import { fetchMachineAlerts, fetchMachineSummary } from './src/services/api';
+import { Text, TextInput, View, StyleSheet } from 'react-native';
+import { fetchMachineAlerts, fetchMachineSummary, loginMobile, setMobileToken } from './src/services/api';
 import { socket } from './src/services/socket';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { MachinesScreen } from './src/screens/MachinesScreen';
 import { AlertsScreen } from './src/screens/AlertsScreen';
 import { colors } from './src/theme/colors';
+import { PressableScaleButton } from './src/components/PressableScaleButton';
 
 const Tab = createBottomTabNavigator();
 
@@ -25,14 +26,16 @@ function TabIcon({ routeName, focused }) {
 export default function App() {
   const [machines, setMachines] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [auth, setAuth] = useState({ token: '', user: null });
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+
+  const refresh = useCallback(async () => {
+    setMachines(await fetchMachineSummary());
+    setAlerts(await fetchMachineAlerts());
+  }, []);
 
   useEffect(() => {
-    async function bootstrap() {
-      setMachines(await fetchMachineSummary());
-      setAlerts(await fetchMachineAlerts());
-    }
-
-    bootstrap();
+    refresh();
 
     socket.on('machine:reading', (reading) => {
       setMachines((current) => {
@@ -49,9 +52,43 @@ export default function App() {
       socket.off('machine:reading');
       socket.off('machine:alert');
     };
-  }, []);
+  }, [refresh]);
 
-  const sharedProps = useMemo(() => ({ machines, alerts }), [machines, alerts]);
+  const sharedProps = useMemo(() => ({ machines, alerts, onRefresh: refresh }), [machines, alerts, refresh]);
+
+  async function handleLogin() {
+    try {
+      const data = await loginMobile(loginForm);
+      setMobileToken(data.token);
+      setAuth({ token: data.token, user: data.user });
+      await refresh();
+    } catch (error) {
+      setAuth({ token: '', user: null });
+    }
+  }
+
+  if (!auth.token) {
+    return (
+      <View style={styles.loginPage}>
+        <Text style={styles.loginTitle}>LoomOps Mobile</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={loginForm.email}
+          autoCapitalize="none"
+          onChangeText={(value) => setLoginForm((current) => ({ ...current, email: value }))}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          secureTextEntry
+          value={loginForm.password}
+          onChangeText={(value) => setLoginForm((current) => ({ ...current, password: value }))}
+        />
+        <PressableScaleButton label="Login" onPress={handleLogin} />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
@@ -77,12 +114,36 @@ export default function App() {
           {() => <DashboardScreen {...sharedProps} />}
         </Tab.Screen>
         <Tab.Screen name="Machines">
-          {() => <MachinesScreen machines={machines} />}
+          {() => <MachinesScreen machines={machines} onRefresh={refresh} />}
         </Tab.Screen>
         <Tab.Screen name="Alerts">
-          {() => <AlertsScreen alerts={alerts} />}
+          {() => <AlertsScreen alerts={alerts} onRefresh={refresh} />}
         </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loginPage: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    padding: 20,
+    gap: 12
+  },
+  loginTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 8
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  }
+});
