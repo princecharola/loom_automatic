@@ -1,6 +1,7 @@
 import { MachineReading } from '../models/MachineReading.js';
 import { Alert } from '../models/Alert.js';
 import { Machine } from '../models/Machine.js';
+import { User } from '../models/User.js';
 import { evaluateAlerts } from '../services/alertService.js';
 import { getSocket } from '../config/socket.js';
 
@@ -17,18 +18,34 @@ export async function getMachines(req, res, next) {
 
 export async function createMachine(req, res, next) {
   try {
-    const { machineId, name, location, status, speed = 0 } = req.body;
+    const { machineId, name, location, threshold, status, speed = 0 } = req.body;
 
     const machine = await Machine.create({
       machineId,
       name,
       location,
+      threshold,
       status,
       speed,
       timestamp: new Date()
     });
 
     return res.status(201).json(machine);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getMachineById(req, res, next) {
+  try {
+    const { machineId } = req.params;
+    const machine = await Machine.findOne({ machineId }).populate('assignedOperator', 'name email role');
+
+    if (!machine) {
+      return res.status(404).json({ message: 'Machine not found.' });
+    }
+
+    return res.json(machine);
   } catch (error) {
     return next(error);
   }
@@ -41,6 +58,34 @@ export async function updateMachine(req, res, next) {
       new: true,
       runValidators: true
     });
+
+    if (!machine) {
+      return res.status(404).json({ message: 'Machine not found.' });
+    }
+
+    return res.json(machine);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function assignMachineOperator(req, res, next) {
+  try {
+    const { machineId } = req.params;
+    const { operatorId } = req.body;
+
+    if (operatorId) {
+      const operator = await User.findById(operatorId);
+      if (!operator) {
+        return res.status(404).json({ message: 'Operator not found.' });
+      }
+    }
+
+    const machine = await Machine.findOneAndUpdate(
+      { machineId },
+      { assignedOperator: operatorId || null },
+      { new: true, runValidators: true }
+    ).populate('assignedOperator', 'name email role');
 
     if (!machine) {
       return res.status(404).json({ message: 'Machine not found.' });
