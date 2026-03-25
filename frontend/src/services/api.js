@@ -1,34 +1,59 @@
-import axios from 'axios';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api'
-});
+async function request(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    ...options
+  });
+
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`;
+    try {
+      const data = await response.json();
+      errorMessage = data.message || errorMessage;
+    } catch {
+      // ignore JSON parse errors for plain-text/non-JSON responses
+    }
+    throw new Error(errorMessage);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
 
 export async function fetchMachines() {
-  const { data } = await api.get('/machines');
-  return data;
+  return request('/machines');
 }
 
 export async function addMachine(payload) {
-  const { data } = await api.post('/machines', payload);
-  return data;
+  return request('/machines', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function editMachine(machineId, payload) {
-  const { data } = await api.put(`/machines/${machineId}`, payload);
-  return data;
+  return request(`/machines/${machineId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function removeMachine(machineId) {
-  await api.delete(`/machines/${machineId}`);
+  return request(`/machines/${machineId}`, {
+    method: 'DELETE'
+  });
 }
 
 export async function fetchSummary() {
-  const { data } = await api.get('/machines/summary');
-  return data;
+  return request('/machines/summary');
 }
 
 export async function fetchAlerts() {
-  const { data } = await api.get('/machines/alerts?limit=20');
-  return data;
+  return request('/machines/alerts?limit=20');
 }

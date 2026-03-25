@@ -9,6 +9,7 @@ export function AlertList({ alerts }) {
       transition={{ type: 'spring', stiffness: 260, damping: 18 }}
     >
       <h3>Active & Recent Alerts</h3>
+      {alerts.length === 0 ? <p className="empty-row">No active alerts.</p> : null}
       <ul>
         {alerts.map((alert) => (
           <li key={alert._id || `${alert.machineId}-${alert.createdAt}`} className={`alert-item ${alert.type}`}>
