@@ -1,31 +1,68 @@
 import React from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { fetchAlerts, fetchSummary } from './services/api';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import {
+  addMachine,
+  editMachine,
+  fetchAlerts,
+  fetchMachines,
+  removeMachine
+} from './services/api';
 import { socket } from './services/socket';
-import { StatCard } from './components/StatCard';
-import { SpeedChart } from './components/SpeedChart';
-import { AlertList } from './components/AlertList';
+import { TopNav } from './components/TopNav';
+import { DashboardPage } from './pages/DashboardPage';
+import { MachinesPage } from './pages/MachinesPage';
+import { AlertsPage } from './pages/AlertsPage';
+
+const emptyForm = {
+  machineId: '',
+  name: '',
+  location: '',
+  status: 'stopped',
+  speed: 0
+};
 
 export default function App() {
-  const [summary, setSummary] = useState([]);
+  const [machines, setMachines] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [readings, setReadings] = useState([]);
+  const [formState, setFormState] = useState(emptyForm);
+  const [editingId, setEditingId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function bootstrap() {
-      const [summaryData, alertData] = await Promise.all([fetchSummary(), fetchAlerts()]);
-      setSummary(summaryData);
-      setReadings(summaryData);
-      setAlerts(alertData);
+      try {
+        setLoading(true);
+        setError('');
+        const [machineData, alertData] = await Promise.all([fetchMachines(), fetchAlerts()]);
+        setMachines(machineData);
+        setReadings(machineData);
+        setAlerts(alertData);
+      } catch (loadError) {
+        setError(loadError.message || 'Unable to fetch dashboard data from backend.');
+      } finally {
+        setLoading(false);
+      }
     }
 
     bootstrap();
 
     socket.on('machine:reading', (reading) => {
       setReadings((current) => [...current.slice(-49), reading]);
-      setSummary((current) => {
-        const filtered = current.filter((item) => item.machineId !== reading.machineId);
-        return [...filtered, reading].sort((a, b) => a.machineId.localeCompare(b.machineId));
+      setMachines((current) => {
+        const existing = current.find((item) => item.machineId === reading.machineId);
+        if (!existing) {
+          return [...current, { ...reading, name: reading.machineId, location: 'Floor 1' }].sort((a, b) =>
+            a.machineId.localeCompare(b.machineId)
+          );
+        }
+
+        return current
+          .map((item) => (item.machineId === reading.machineId ? { ...item, ...reading } : item))
+          .sort((a, b) => a.machineId.localeCompare(b.machineId));
       });
     });
 
@@ -39,61 +76,85 @@ export default function App() {
     };
   }, []);
 
-  const stats = useMemo(() => {
-    const totalMachines = summary.length;
-    const running = summary.filter((item) => item.status === 'running').length;
-    const stopped = summary.filter((item) => item.status === 'stopped').length;
-    const avgSpeed = totalMachines
-      ? Math.round(summary.reduce((sum, item) => sum + item.speed, 0) / totalMachines)
-      : 0;
+  async function handleSubmit(event) {
+    event.preventDefault();
 
-    return { totalMachines, running, stopped, avgSpeed };
-  }, [summary]);
+    if (editingId) {
+      const updated = await editMachine(editingId, formState);
+      setMachines((current) =>
+        current.map((machine) => (machine.machineId === editingId ? updated : machine))
+      );
+      setEditingId('');
+      setFormState(emptyForm);
+      return;
+    }
+
+    const created = await addMachine(formState);
+    setMachines((current) => [...current, created].sort((a, b) => a.machineId.localeCompare(b.machineId)));
+    setFormState(emptyForm);
+  }
+
+  function handleEdit(machine) {
+    setEditingId(machine.machineId);
+    setFormState({
+      machineId: machine.machineId,
+      name: machine.name,
+      location: machine.location,
+      status: machine.status,
+      speed: machine.speed
+    });
+  }
+
+  async function handleDelete(machineId) {
+    await removeMachine(machineId);
+    setMachines((current) => current.filter((machine) => machine.machineId !== machineId));
+    if (editingId === machineId) {
+      setEditingId('');
+      setFormState(emptyForm);
+    }
+  }
 
   return (
-    <div className="dashboard">
-      <header>
-        <h1>Loom Machine Monitoring Dashboard</h1>
-        <p>Real-time view of machine speed, status, and alerts.</p>
-      </header>
+    <BrowserRouter>
+      <AnimatePresence mode="wait">
+        <motion.div
+          className="dashboard"
+          key="dashboard"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.3 }}
+        >
+          <TopNav />
 
-      <section className="stats-grid">
-        <StatCard title="Machines" value={stats.totalMachines} accent="#0f172a" />
-        <StatCard title="Running" value={stats.running} accent="#16a34a" />
-        <StatCard title="Stopped" value={stats.stopped} accent="#dc2626" />
-        <StatCard title="Avg Speed" value={`${stats.avgSpeed} RPM`} accent="#4f46e5" />
-      </section>
+          {loading ? <p className="app-state">Loading dashboard data...</p> : null}
+          {error ? <p className="app-state error">{error}</p> : null}
 
-      <section className="content-grid">
-        <SpeedChart readings={readings} />
-        <AlertList alerts={alerts} />
-      </section>
-
-      <section className="card table-card">
-        <h3>Latest Machine Status</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Machine</th>
-              <th>Speed</th>
-              <th>Status</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.map((item) => (
-              <tr key={item.machineId}>
-                <td>{item.machineId}</td>
-                <td>{item.speed}</td>
-                <td>
-                  <span className={`badge ${item.status}`}>{item.status}</span>
-                </td>
-                <td>{new Date(item.timestamp).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </div>
+          {!loading && !error ? (
+            <Routes>
+              <Route path="/" element={<DashboardPage machines={machines} alerts={alerts} readings={readings} />} />
+              <Route
+                path="/machines"
+                element={(
+                  <MachinesPage
+                    machines={machines}
+                    formState={formState}
+                    editingId={editingId}
+                    setFormState={setFormState}
+                    setEditingId={setEditingId}
+                    setFormReset={() => setFormState(emptyForm)}
+                    onSubmit={handleSubmit}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                )}
+              />
+              <Route path="/alerts" element={<AlertsPage alerts={alerts} />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          ) : null}
+        </motion.div>
+      </AnimatePresence>
+    </BrowserRouter>
   );
 }

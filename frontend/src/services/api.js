@@ -1,15 +1,50 @@
-import axios from 'axios';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api'
-});
+async function request(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    },
+    ...options
+  });
 
-export async function fetchSummary() {
-  const { data } = await api.get('/machines/summary');
-  return data;
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
+
+export async function fetchMachines() {
+  return request('/machines');
+}
+
+export async function addMachine(payload) {
+  return request('/machines', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function editMachine(machineId, payload) {
+  return request(`/machines/${machineId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function removeMachine(machineId) {
+  return request(`/machines/${machineId}`, {
+    method: 'DELETE'
+  });
 }
 
 export async function fetchAlerts() {
-  const { data } = await api.get('/machines/alerts?limit=20');
-  return data;
+  return request('/machines/alerts?limit=20');
 }

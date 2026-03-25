@@ -1,7 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import 'react-native-gesture-handler';
+import React, { useEffect, useMemo, useState } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Text } from 'react-native';
 import { fetchMachineAlerts, fetchMachineSummary } from './src/services/api';
 import { socket } from './src/services/socket';
+import { DashboardScreen } from './src/screens/DashboardScreen';
+import { MachinesScreen } from './src/screens/MachinesScreen';
+import { AlertsScreen } from './src/screens/AlertsScreen';
+import { colors } from './src/theme/colors';
+
+const Tab = createBottomTabNavigator();
+
+const tabIcons = {
+  Dashboard: '📊',
+  Machines: '🧵',
+  Alerts: '🚨'
+};
+
+function TabIcon({ routeName, focused }) {
+  return <Text style={{ fontSize: focused ? 18 : 16 }}>{tabIcons[routeName]}</Text>;
+}
 
 export default function App() {
   const [machines, setMachines] = useState([]);
@@ -32,90 +51,38 @@ export default function App() {
     };
   }, []);
 
+  const sharedProps = useMemo(() => ({ machines, alerts }), [machines, alerts]);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Loom Monitoring</Text>
-        <Text style={styles.subtitle}>Live machine data and alerts</Text>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Machines</Text>
-          {machines.map((machine) => (
-            <View style={styles.row} key={machine.machineId}>
-              <View>
-                <Text style={styles.machineId}>{machine.machineId}</Text>
-                <Text>{machine.status}</Text>
-              </View>
-              <Text style={styles.speed}>{machine.speed} RPM</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Alerts</Text>
-          {alerts.map((alert) => (
-            <View style={styles.alertRow} key={alert._id || `${alert.machineId}-${alert.createdAt}`}>
-              <Text style={styles.alertTitle}>{alert.machineId}</Text>
-              <Text>{alert.message}</Text>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            height: 62
+          },
+          tabBarActiveTintColor: colors.textPrimary,
+          tabBarInactiveTintColor: colors.textSecondary,
+          tabBarLabelStyle: {
+            fontWeight: '600',
+            fontSize: 12,
+            paddingBottom: 4
+          },
+          tabBarIcon: ({ focused }) => <TabIcon routeName={route.name} focused={focused} />
+        })}
+      >
+        <Tab.Screen name="Dashboard">
+          {() => <DashboardScreen {...sharedProps} />}
+        </Tab.Screen>
+        <Tab.Screen name="Machines">
+          {() => <MachinesScreen machines={machines} />}
+        </Tab.Screen>
+        <Tab.Screen name="Alerts">
+          {() => <AlertsScreen alerts={alerts} />}
+        </Tab.Screen>
+      </Tab.Navigator>
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc'
-  },
-  content: {
-    padding: 20,
-    gap: 16
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a'
-  },
-  subtitle: {
-    color: '#475569',
-    marginBottom: 8
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    gap: 12
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700'
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0'
-  },
-  machineId: {
-    fontWeight: '700'
-  },
-  speed: {
-    fontSize: 16,
-    color: '#4f46e5',
-    fontWeight: '700'
-  },
-  alertRow: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 12,
-    padding: 12,
-    gap: 4
-  },
-  alertTitle: {
-    fontWeight: '700'
-  }
-});

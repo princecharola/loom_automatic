@@ -132,3 +132,130 @@ td {
     padding: 20px;
   }
 }
+
+.alert-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.status-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.status-pill.warning {
+  background: #fde68a;
+  color: #92400e;
+}
+
+.status-pill.critical,
+.status-pill.error {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.machine-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.machine-form input,
+.machine-form select,
+.machine-form button,
+.table-actions button {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.machine-form button,
+.table-actions button {
+  background: #4f46e5;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.machine-form button.secondary,
+.table-actions button.secondary {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.table-actions button.danger {
+  background: #dc2626;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  position: sticky;
+  top: 12px;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+
+.top-nav h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.top-nav-links {
+  display: flex;
+  gap: 10px;
+}
+
+.nav-link {
+  color: #475569;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.nav-link.active {
+  color: #ffffff;
+  background: #4f46e5;
+}
+
+.single-column {
+  grid-template-columns: 1fr;
+}
+
+.app-state {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-weight: 500;
+}
+
+.app-state.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+@media (max-width: 700px) {
+  .top-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
