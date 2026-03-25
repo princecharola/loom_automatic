@@ -2,10 +2,14 @@ import React, { useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text } from 'react-native';
 import { colors } from '../theme/colors';
 
-export function PressableScaleButton({ label, onPress, variant = 'primary' }) {
+export function PressableScaleButton({ label, onPress, variant = 'primary', disabled = false }) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const onPressIn = () => {
+    if (disabled) {
+      return;
+    }
+
     Animated.spring(scale, {
       toValue: 0.96,
       speed: 30,
@@ -24,8 +28,15 @@ export function PressableScaleButton({ label, onPress, variant = 'primary' }) {
   };
 
   return (
-    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
-      <Animated.View style={[styles.button, styles[variant], { transform: [{ scale }] }]}>
+    <Pressable disabled={disabled} onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
+      <Animated.View
+        style={[
+          styles.button,
+          styles[variant],
+          disabled ? styles.disabled : null,
+          { transform: [{ scale }] }
+        ]}
+      >
         <Text style={styles.label}>{label}</Text>
       </Animated.View>
     </Pressable>
@@ -44,6 +55,10 @@ const styles = StyleSheet.create({
   },
   subtle: {
     backgroundColor: colors.surfaceAlt
+  },
+  disabled: {
+    backgroundColor: colors.border,
+    opacity: 0.7
   },
   label: {
     color: colors.textPrimary,
