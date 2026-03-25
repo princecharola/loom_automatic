@@ -6,8 +6,11 @@ export const colors = {
   textSecondary: '#94a3b8',
   primary: '#7c3aed',
   success: '#16a34a',
+  successSoft: '#123826',
   warning: '#f59e0b',
+  warningSoft: '#3d2a12',
   critical: '#ef4444',
+  criticalSoft: '#3f1b23',
   border: '#243046',
   shadow: '#020617'
 };

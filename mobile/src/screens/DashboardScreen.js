@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Container } from '../components/Container';
 import { AppCard } from '../components/AppCard';
+import { PressableScaleButton } from '../components/PressableScaleButton';
 import { colors } from '../theme/colors';
 
 function MetricCard({ icon, label, value, accent }) {
@@ -14,7 +15,7 @@ function MetricCard({ icon, label, value, accent }) {
   );
 }
 
-export function DashboardScreen({ machines, alerts }) {
+export function DashboardScreen({ machines, alerts, pushStatus, onRefresh, onLogout, refreshing }) {
   const metrics = useMemo(() => {
     const totalMachines = machines.length;
     const activeMachines = machines.filter((machine) => machine.status === 'running').length;
@@ -24,12 +25,21 @@ export function DashboardScreen({ machines, alerts }) {
   }, [machines, alerts]);
 
   return (
-    <Container title="Dashboard" subtitle="Operational overview of your loom floor">
+    <Container
+      title="Dashboard"
+      subtitle="Operational overview of your loom floor"
+      headerAction={<PressableScaleButton label="Logout" variant="subtle" onPress={onLogout} />}
+    >
       <View style={styles.grid}>
         <MetricCard icon="🧵" label="Total Machines" value={metrics.totalMachines} accent={colors.primary} />
         <MetricCard icon="✅" label="Active Machines" value={metrics.activeMachines} accent={colors.success} />
         <MetricCard icon="⚠️" label="Alerts" value={metrics.alertCount} accent={colors.warning} />
       </View>
+      <AppCard style={styles.statusCard}>
+        <Text style={styles.statusLabel}>Push notifications</Text>
+        <Text style={styles.statusValue}>{pushStatus}</Text>
+        <PressableScaleButton label={refreshing ? 'Refreshing...' : 'Refresh data'} onPress={onRefresh} disabled={refreshing} />
+      </AppCard>
     </Container>
   );
 }
@@ -52,5 +62,16 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 28,
     fontWeight: '700'
+  },
+  statusCard: {
+    gap: 10
+  },
+  statusLabel: {
+    color: colors.textSecondary,
+    fontWeight: '600'
+  },
+  statusValue: {
+    color: colors.textPrimary,
+    fontWeight: '600'
   }
 });

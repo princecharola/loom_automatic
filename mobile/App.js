@@ -1,14 +1,17 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
-import { fetchMachineAlerts, fetchMachineSummary } from './src/services/api';
+import { fetchMachineAlerts, fetchMachineSummary, login } from './src/services/api';
 import { socket } from './src/services/socket';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { MachinesScreen } from './src/screens/MachinesScreen';
 import { AlertsScreen } from './src/screens/AlertsScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
 import { colors } from './src/theme/colors';
+import { clearStoredToken, getStoredToken, persistToken } from './src/services/authStorage';
+import { registerForPushNotificationsAsync, sendInAppAlertNotification } from './src/services/notifications';
 
 const Tab = createBottomTabNavigator();
 
@@ -25,14 +28,61 @@ function TabIcon({ routeName, focused }) {
 export default function App() {
   const [machines, setMachines] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [token, setToken] = useState(null);
+  const [initializing, setInitializing] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [pushStatus, setPushStatus] = useState('Waiting for permission...');
 
   useEffect(() => {
-    async function bootstrap() {
-      setMachines(await fetchMachineSummary());
-      setAlerts(await fetchMachineAlerts());
+    async function loadToken() {
+      try {
+        const storedToken = await getStoredToken();
+        if (storedToken) {
+          setToken(storedToken);
+        }
+      } finally {
+        setInitializing(false);
+      }
     }
 
-    bootstrap();
+    loadToken();
+  }, []);
+
+  const loadMonitoringData = useCallback(
+    async ({ withLoading = false } = {}) => {
+      if (!token) {
+        return;
+      }
+
+      if (withLoading) {
+        setRefreshing(true);
+      }
+
+      try {
+        const [summary, machineAlerts] = await Promise.all([
+          fetchMachineSummary(token),
+          fetchMachineAlerts(token)
+        ]);
+
+        setMachines(summary);
+        setAlerts(machineAlerts);
+      } finally {
+        if (withLoading) {
+          setRefreshing(false);
+        }
+      }
+    },
+    [token]
+  );
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    loadMonitoringData({ withLoading: true });
 
     socket.on('machine:reading', (reading) => {
       setMachines((current) => {
@@ -43,15 +93,68 @@ export default function App() {
 
     socket.on('machine:alert', (alert) => {
       setAlerts((current) => [alert, ...current].slice(0, 20));
+      sendInAppAlertNotification(alert);
     });
+
+    registerForPushNotificationsAsync()
+      .then((pushToken) => {
+        if (pushToken) {
+          setPushStatus('Enabled');
+          return;
+        }
+
+        setPushStatus('Permission denied');
+      })
+      .catch(() => {
+        setPushStatus('Unable to register on this device');
+      });
 
     return () => {
       socket.off('machine:reading');
       socket.off('machine:alert');
     };
-  }, []);
+  }, [loadMonitoringData, token]);
 
-  const sharedProps = useMemo(() => ({ machines, alerts }), [machines, alerts]);
+  const handleLogin = async ({ email, password }) => {
+    setAuthError('');
+    setAuthLoading(true);
+
+    try {
+      const response = await login({ email, password });
+      await persistToken(response.token);
+      setToken(response.token);
+    } catch (error) {
+      setAuthError(error.message || 'Login failed.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await clearStoredToken();
+    setToken(null);
+    setMachines([]);
+    setAlerts([]);
+    setPushStatus('Waiting for permission...');
+  };
+
+  const sharedProps = useMemo(
+    () => ({
+      machines,
+      alerts,
+      refreshing,
+      onRefresh: () => loadMonitoringData({ withLoading: true })
+    }),
+    [alerts, loadMonitoringData, machines, refreshing]
+  );
+
+  if (initializing) {
+    return null;
+  }
+
+  if (!token) {
+    return <LoginScreen onSubmit={handleLogin} isLoading={authLoading} errorMessage={authError} />;
+  }
 
   return (
     <NavigationContainer>
@@ -74,13 +177,19 @@ export default function App() {
         })}
       >
         <Tab.Screen name="Dashboard">
-          {() => <DashboardScreen {...sharedProps} />}
+          {() => (
+            <DashboardScreen
+              {...sharedProps}
+              pushStatus={pushStatus}
+              onLogout={handleLogout}
+            />
+          )}
         </Tab.Screen>
         <Tab.Screen name="Machines">
-          {() => <MachinesScreen machines={machines} />}
+          {() => <MachinesScreen {...sharedProps} />}
         </Tab.Screen>
         <Tab.Screen name="Alerts">
-          {() => <AlertsScreen alerts={alerts} />}
+          {() => <AlertsScreen {...sharedProps} />}
         </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>
