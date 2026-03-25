@@ -11,6 +11,7 @@ import {
 import { socket } from './services/socket';
 import { DashboardPage } from './pages/DashboardPage';
 import { MachinesPage } from './pages/MachinesPage';
+import { LoginPage } from './pages/LoginPage';
 
 const emptyForm = {
   machineId: '',
@@ -18,6 +19,12 @@ const emptyForm = {
   location: '',
   status: 'stopped',
   speed: 0
+};
+
+const roleCapabilities = {
+  admin: { canViewMachines: true, canManageMachines: true },
+  operator: { canViewMachines: true, canManageMachines: true },
+  viewer: { canViewMachines: false, canManageMachines: false }
 };
 
 export default function App() {
@@ -29,6 +36,12 @@ export default function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [alertFilterType, setAlertFilterType] = useState('all');
+  const [alertFilterMachine, setAlertFilterMachine] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('loomops-theme') === 'dark');
+
+  const permissions = currentUser ? roleCapabilities[currentUser.role] : roleCapabilities.viewer;
 
   useEffect(() => {
     async function bootstrap() {
@@ -75,6 +88,21 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    document.body.classList.toggle('theme-dark', isDarkMode);
+    localStorage.setItem('loomops-theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((alert) => {
+      const typeMatches = alertFilterType === 'all' || alert.type === alertFilterType;
+      const machineMatches =
+        alertFilterMachine.trim() === '' ||
+        alert.machineId?.toLowerCase().includes(alertFilterMachine.trim().toLowerCase());
+      return typeMatches && machineMatches;
+    });
+  }, [alerts, alertFilterMachine, alertFilterType]);
+
   const stats = useMemo(() => {
     const totalMachines = machines.length;
     const running = machines.filter((item) => item.status === 'running').length;
@@ -82,14 +110,19 @@ export default function App() {
     const avgSpeed = totalMachines
       ? Math.round(machines.reduce((sum, item) => sum + (Number(item.speed) || 0), 0) / totalMachines)
       : 0;
-    const criticalAlerts = alerts.filter((item) => item.type === 'critical' || item.type === 'error').length;
+    const criticalAlerts = filteredAlerts.filter((item) => item.type === 'critical' || item.type === 'error').length;
     const productionCount = readings.length;
 
     return { totalMachines, running, stopped, avgSpeed, criticalAlerts, productionCount };
-  }, [machines, alerts, readings]);
+  }, [machines, filteredAlerts, readings]);
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (!permissions.canManageMachines) {
+      setErrorMessage('Your role does not allow machine management changes.');
+      return;
+    }
 
     try {
       setErrorMessage('');
@@ -112,6 +145,11 @@ export default function App() {
   }
 
   function handleEdit(machine) {
+    if (!permissions.canManageMachines) {
+      setErrorMessage('Your role does not allow machine management changes.');
+      return;
+    }
+
     setEditingId(machine.machineId);
     setFormState({
       machineId: machine.machineId,
@@ -129,6 +167,11 @@ export default function App() {
   }
 
   async function handleDelete(machineId) {
+    if (!permissions.canManageMachines) {
+      setErrorMessage('Your role does not allow machine management changes.');
+      return;
+    }
+
     try {
       setErrorMessage('');
       await removeMachine(machineId);
@@ -141,11 +184,23 @@ export default function App() {
     }
   }
 
+  function handleLogout() {
+    setCurrentUser(null);
+    setActiveView('dashboard');
+    setEditingId('');
+    setFormState(emptyForm);
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLogin={setCurrentUser} />;
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar card">
         <h2>LoomOps</h2>
         <p className="sidebar-copy">Automation monitoring</p>
+        <p className="user-role">{currentUser.name} · {currentUser.role}</p>
         <nav>
           <button
             type="button"
@@ -154,12 +209,20 @@ export default function App() {
           >
             Dashboard
           </button>
-          <button
-            type="button"
-            className={`nav-link ${activeView === 'machines' ? 'active' : ''}`}
-            onClick={() => setActiveView('machines')}
-          >
-            Machines
+          {permissions.canViewMachines ? (
+            <button
+              type="button"
+              className={`nav-link ${activeView === 'machines' ? 'active' : ''}`}
+              onClick={() => setActiveView('machines')}
+            >
+              Machines
+            </button>
+          ) : null}
+          <button type="button" className="nav-link" onClick={() => setIsDarkMode((current) => !current)}>
+            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+          </button>
+          <button type="button" className="nav-link" onClick={handleLogout}>
+            Logout
           </button>
         </nav>
       </aside>
@@ -173,14 +236,18 @@ export default function App() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.3 }}
           >
-            {activeView === 'dashboard' ? (
+            {activeView === 'dashboard' || !permissions.canViewMachines ? (
               <DashboardPage
                 machines={machines}
-                alerts={alerts}
+                alerts={filteredAlerts}
                 readings={readings}
                 stats={stats}
                 isLoading={isLoading}
                 errorMessage={errorMessage}
+                alertFilterType={alertFilterType}
+                alertFilterMachine={alertFilterMachine}
+                onFilterTypeChange={setAlertFilterType}
+                onFilterMachineChange={setAlertFilterMachine}
               />
             ) : (
               <MachinesPage
@@ -194,6 +261,7 @@ export default function App() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onCancel={cancelEdit}
+                canManageMachines={permissions.canManageMachines}
               />
             )}
           </motion.div>
